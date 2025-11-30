@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mythical Draw It!</title>
+    <style>
+        body {
+            margin:0; padding:0;
+            font-family:"Segoe UI",sans-serif;
+            background:linear-gradient(135deg,#4b0082,#7a2bcf,#b47bff);
+            color:white;
+            display:flex; flex-direction:column;
+            align-items:center; text-align:center;
+        }
+        h1 { margin-top:40px; font-size:2.2rem; font-weight:700; }
+        #prompt { color:#ffd6ff; font-weight:bold; }
+        .score {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.3);
+            padding: 15px 20px;
+            border-radius: 12px;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+        .score-num { color: #b47bff; font-size: 1.5rem; }
+        .container {
+            background:rgba(255,255,255,0.1);
+            padding:25px; margin-top:30px;
+            border-radius:15px;
+            backdrop-filter:blur(8px);
+        }
+        canvas {
+            border:3px solid #e5c3ff;
+            border-radius:12px;
+            cursor:crosshair;
+            display: block;
+            background-color: black !important;
+        }
+        button {
+            padding:10px 20px; margin:10px;
+            border:none; border-radius:12px;
+            font-size:1rem; font-weight:bold;
+            cursor:pointer; transition:0.2s;
+        }
+        button:hover { transform:scale(1.05); opacity:0.9; }
+        .clear-btn { background:#ff99cc; color:#4b0045; }
+        .submit-btn { background:#b47bff; color:#30004d; }
+        #result { margin-top: 15px; }
+    </style>
+</head>
+
+<body>
+    <div class="score">
+        Score: <span class="score-num" id="score">0</span> / <span id="total">0</span>
+    </div>
+
+    <h1>Draw a <span id="prompt"></span>!</h1>
+
+    <div class="container">
+        <canvas id="canvas" width="280" height="280"></canvas><br>
+        <button class="clear-btn" onclick="clearCanvas()">Clear</button>
+        <button class="submit-btn" onclick="sendDrawing()">Submit</button>
+        <button class="submit-btn" onclick="newRound()">New Round</button>
+        <h2 id="result"></h2>
+    </div>
+
+<script>
+    const categories = ["dragon", "angel", "mermaid", "castle", "flying saucer"];
+    const categoryMap = {
+        "dragon": "dragon",
+        "angel": "angel",
+        "mermaid": "mermaid",
+        "castle": "castle",
+        "flying saucer": "flying_saucer",
+        "flying_saucer": "flying saucer"
+    };
+
+    let prompt = categories[Math.floor(Math.random()*categories.length)];
+    let score = 0;
+    let total = 0;
+
+    document.getElementById("prompt").innerText = prompt;
+
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+
+    // Fill with BLACK background
+    ctx.fillStyle = "black";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    let drawing = false;
+    let lastX = 0, lastY = 0;
+
+    function getCoords(e) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top
+        };
+    }
+
+    canvas.addEventListener("mousedown", e => {
+        drawing = true;
+        const coords = getCoords(e);
+        lastX = coords.x;
+        lastY = coords.y;
+    });
+
+    canvas.addEventListener("mouseup", () => drawing = false);
+    canvas.addEventListener("mouseout", () => drawing = false);
+
+    canvas.addEventListener("mousemove", e => {
+        if (!drawing) return;
+        const coords = getCoords(e);
+
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 3;
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(coords.x, coords.y);
+        ctx.stroke();
+
+        lastX = coords.x;
+        lastY = coords.y;
+    });
+
+    function clearCanvas() {
+        ctx.fillStyle = "black";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function newRound() {
+        clearCanvas();
+        prompt = categories[Math.floor(Math.random()*categories.length)];
+        document.getElementById("prompt").innerText = prompt;
+        document.getElementById("result").innerText = "";
+    }
+
+    function sendDrawing() {
+        const img = canvas.toDataURL("image/png");
+
+        fetch("/predict", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({image: img, correct_answer: prompt})
+        })
+        .then(res => res.json())
+        .then(data => {
+            //normalize the prediction for comparison
+            let prediction = data.prediction;
+            let normalizedPrediction = categoryMap[prediction] || prediction;
+            let normalizedPrompt = categoryMap[prompt] || prompt;
+
+            const correct = normalizedPrediction === normalizedPrompt || prediction === prompt;
+            const emoji = correct ? "✅" : "❌";
+
+            //update score
+            total++;
+            if (correct) score++;
+            document.getElementById("score").innerText = score;
+            document.getElementById("total").innerText = total;
+
+            document.getElementById("result").innerText = `AI guessed: ${data.prediction} ${emoji}`;
+        })
+        .catch(err => {
+            document.getElementById("result").innerText = "Error: " + err.message;
+        });
+    }
+</script>
+</body>
+</html>
